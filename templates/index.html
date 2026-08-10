@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI YouTube Resume</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <!-- Biblioteca para formatar Markdown bonito -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+
+    <div class="app-container">
+        <!-- Cabeçalho -->
+        <header class="header">
+            <h1><span>YT</span> YouResum AI</h1>
+            <p>Transforme vídeos em Resumos, Roadmaps e Tópicos instantâneos.</p>
+        </header>
+
+        <!-- Histórico do Chat -->
+        <div id="chat-history" class="chat-history">
+            <div class="message system-msg">
+                👋 Olá! Cole a URL de um vídeo do YouTube abaixo e escolha o formato desejado.
+            </div>
+        </div>
+
+        <!-- Formulário de Entrada -->
+        <div class="input-area">
+            <div class="mode-selector">
+                <label>
+                    <input type="radio" name="modo" value="resumo" checked> Resumo
+                </label>
+                <label>
+                    <input type="radio" name="modo" value="roadmap"> Roadmap
+                </label>
+                <label>
+                    <input type="radio" name="modo" value="topicos"> Tópicos
+                </label>
+            </div>
+
+            <div class="input-group">
+                <input type="text" id="url-input" placeholder="Cole o link do vídeo do YouTube aqui..." autocomplete="off">
+                <button id="send-btn" onclick="enviarVideo()">Enviar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Função para adicionar mensagem no chat
+        function adicionarMensagem(autor, texto, videoId = null) {
+            const chatHistory = document.getElementById("chat-history");
+            const msgDiv = document.createElement("div");
+            msgDiv.classList.add("message", autor === "user" ? "user-msg" : "ai-msg");
+
+            if (videoId) {
+                const iframe = document.createElement("iframe");
+                iframe.src = `https://www.youtube.com/embed/${videoId}`;
+                iframe.classList.add("yt-embed");
+                iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
+                iframe.allowFullscreen = true;
+                msgDiv.appendChild(iframe);
+            }
+
+            const contentDiv = document.createElement("div");
+            contentDiv.classList.add("content");
+            contentDiv.innerHTML = marked.parse(texto);
+            msgDiv.appendChild(contentDiv);
+
+            chatHistory.appendChild(msgDiv);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+
+        async function enviarVideo() {
+            const input = document.getElementById("url-input");
+            const btn = document.getElementById("send-btn");
+            const url = input.value.trim();
+            const modo = document.querySelector('input[name="modo"]:checked').value;
+
+            if (!url) return;
+
+            // Exibe mensagem do usuário
+            adicionarMensagem("user", `**[Modo: ${modo.toUpperCase()}]**\n${url}`);
+            input.value = "";
+            btn.disabled = true;
+
+            // Mensagem de "pensando..."
+            const tempId = "loading-" + Date.now();
+            const chatHistory = document.getElementById("chat-history");
+            const loadingDiv = document.createElement("div");
+            loadingDiv.id = tempId;
+            loadingDiv.classList.add("message", "ai-msg", "loading");
+            loadingDiv.innerText = "⚡ Processando vídeo e gerando resposta...";
+            chatHistory.appendChild(loadingDiv);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+
+            try {
+                const response = await fetch("/processar", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ url: url, modo: modo })
+                });
+
+                const data = await response.json();
+                document.getElementById(tempId).remove();
+
+                if (response.ok) {
+                    adicionarMensagem("ai", data.resposta, data.video_id);
+                } else {
+                    adicionarMensagem("ai", `❌ **Erro:** ${data.erro}`);
+                }
+            } catch (err) {
+                document.getElementById(tempId).remove();
+                adicionarMensagem("ai", "❌ **Erro ao se conectar com o servidor.**");
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        // Permite enviar apertando Enter
+        document.getElementById("url-input").addEventListener("keypress", function(e) {
+            if (e.key === "Enter") enviarVideo();
+        });
+    </script>
+</body>
+</html>
